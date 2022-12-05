@@ -1,0 +1,4 @@
+[submodule "riscv-dv"]
+	path = riscv-dv
+	url = git@github.com:google/riscv-dv
+	branch = master
