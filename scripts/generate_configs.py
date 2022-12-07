@@ -21,4 +21,4 @@ def main():
         (out_dir / str(config_idx)).mkdir(exist_ok=True)
         for seed in range(args.n_seeds):
             config = gen_config(args.default_prob, seed + 1)  # use the index itself as the seed (must be > 0)
-            (out_dir / str(config_idx) / f"{seed}-config.json").write_text(config.json())
+            (out_dir / str(config_idx) / f"{seed}.json").write_text(config.json())

@@ -1,5 +1,4 @@
-from typing import Tuple, Dict
-from dataclasses import dataclass
+from typing import Tuple, Dict, Union
 from pydantic import BaseModel
 import random
 
@@ -21,7 +20,7 @@ def enabled_bool_knob() -> Tuple[range, int]:
 
 
 # Map from knob name to tuple of (allowable range, default value)
-riscv_dv_opts: Dict[str, Tuple[range, int] | str] = {
+riscv_dv_opts: Dict[str, Union[Tuple[range, int], str]] = {
     "num_of_tests": int_value(1),
     # this is an 'int', but I think it should be a bool (enables random PTEs to set exception bits)
     "enable_page_table_exception": bool_knob(0),

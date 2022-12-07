@@ -15,4 +15,4 @@ def main():
     working_dir.mkdir(exist_ok=True)
     bin_output = working_dir / args.out
     cmd, envvars = vcs_build_cmd(riscv_dv_path, working_dir, bin_output)
-    run_cmd(cmd, envvars)
+    run_cmd(cmd, envvars, print_stdout=True)
