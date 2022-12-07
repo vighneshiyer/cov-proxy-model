@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path
 import os
 
+from modeling.riscv_dv import RiscvDvConfig
+
 envvars_t = Dict[str, str]
 
 
@@ -73,3 +75,13 @@ def vcs_build_cmd(riscv_dv_path: Path, working_dir: Path, out: Path, cov: bool =
     assert vcs_path is not None
     final_cmd = [vcs_path] + vcs_opts
     return final_cmd, {'RISCV_DV_ROOT': str(riscv_dv_path)}
+
+
+def riscv_dv_cmd(generator_bin: Path, config: RiscvDvConfig) \
+        -> Tuple[List[str], envvars_t]:
+    # -cm_dir <out>/test.vdb -cm_log /dev/null -cm_name test_<seed>_<test_id>
+    plusargs = [f"+{key}={value}" for key, value in config.plusarg_config.items()]
+    seed = f"+ntb_random_seed{config.seed}"
+
+    cmd = [generator_bin.resolve(), "+vcs+lic+wait"] + plusargs + [seed]
+    return cmd, {}
