@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from modeling.build import vcs_build_cmd, run_cmd
+from modeling.commands import vcs_build_cmd, run_cmd
 
 
 def main():
@@ -15,4 +15,4 @@ def main():
     working_dir.mkdir(exist_ok=True)
     bin_output = working_dir / args.out
     cmd, envvars = vcs_build_cmd(riscv_dv_path, working_dir, bin_output)
-    run_cmd(cmd, envvars, print_stdout=True)
+    run_cmd(cmd, envvars)

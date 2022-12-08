@@ -38,8 +38,8 @@ riscv_dv_opts: Dict[str, Union[Tuple[range, int], str]] = {
     "no_dret": bool_knob(1),
     # wfi will cause problems since we don't produce interrupts in the testharness
     "no_wfi": enabled_bool_knob(),
-    "no_branch_jump": bool_knob(0),
-    "no_load_store": bool_knob(0),
+    "no_branch_jump": bool_knob(1),
+    "no_load_store": bool_knob(1),
     # csr R/W could cause problems, check again later
     "no_csr_instr": bool_knob(1),
     # only use canonical sp as stack pointer (this shouldn't matter for functionality)
@@ -51,10 +51,10 @@ riscv_dv_opts: Dict[str, Union[Tuple[range, int], str]] = {
     "enable_dummy_csr_write": bool_knob(0),
     # no supervisor mode for us
     "allow_sfence_exception": disabled_bool_knob(),
-    # always generate a data segment
-    "no_data_page": disabled_bool_knob(),
-    # no directed instruction sequences, all random - we aren't passing any as arguments
-    "no_directed_instr": enabled_bool_knob(),
+    # never generate a data segment
+    "no_data_page": enabled_bool_knob(),
+    # enable directed instruction sequences, but we aren't using them anyways
+    "no_directed_instr": disabled_bool_knob(),
     "no_fence": bool_knob(1),
     "no_delegation": enabled_bool_knob(),
     # we probably want to weight this towards the lower end (1000 is the actual max)
@@ -72,7 +72,7 @@ riscv_dv_opts: Dict[str, Union[Tuple[range, int], str]] = {
     "force_s_delegation": disabled_bool_knob(),
     "require_signature_addr": disabled_bool_knob(),
     # "signature_addr" # doesn't need to be set if signature isn't being used
-    "disable_compressed_instr": bool_knob(1),
+    "disable_compressed_instr": bool_knob(0),
     "randomize_csr": bool_knob(0),
     # TODO: this may be modified, but I will fix it to the default of 2
     "tvec_alignment": int_value(2),
@@ -86,7 +86,8 @@ riscv_dv_opts: Dict[str, Union[Tuple[range, int], str]] = {
     "set_mstatus_tw": disabled_bool_knob(),
     # unsure about this one
     "set_mstatus_mprv": bool_knob(0),
-    "enable_floating_point": bool_knob(0),
+    # no FP, we're only using rv32imc
+    "enable_floating_point": disabled_bool_knob(),
     "enable_vector_extension": disabled_bool_knob(),
     "enable_b_extension": disabled_bool_knob(),
     "enable_zba_extension": disabled_bool_knob(),

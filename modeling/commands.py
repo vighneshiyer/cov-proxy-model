@@ -5,14 +5,19 @@ import logging
 import shutil
 from pathlib import Path
 import os
+import sys
+from subprocess import TimeoutExpired
 
 from modeling.riscv_dv import RiscvDvConfig
 
 envvars_t = Dict[str, str]
+cmd_t = Tuple[List[str], envvars_t]
+isa_str = "rv32imc"
 
 
+# Return stdout, stderr, and timeout status (True = timed out, False = finished)
 def run_cmd(cmd: List[str], envvars: envvars_t = {},
-            timeout: Optional[int] = None, check_return_code: bool = True) -> Tuple[str, str]:
+            timeout: Optional[int] = None, check_return_code: bool = True) -> Tuple[str, str, bool]:
     print(f"Running command with args {cmd} and envvars {envvars}")
 
     env = os.environ.copy()
@@ -20,14 +25,27 @@ def run_cmd(cmd: List[str], envvars: envvars_t = {},
         env[key] = value
         # env["PATH"] = "/usr/sbin:/sbin:" + my_env["PATH"]
 
-    proc = subprocess.run(cmd, env=env, timeout=timeout, text=True, capture_output=True)
+    try:
+        proc = subprocess.run(cmd, env=env, timeout=timeout, text=True, capture_output=True)
+    except TimeoutExpired as e:
+        print("TIMEOUT", e)
+        if e.stdout:
+            sout = e.stdout.decode("utf-8")
+        else:
+            sout = ""
+        if e.stderr:
+            serr = e.stderr.decode("utf-8")
+        else:
+            serr = ""
+        return sout, serr, True
+
     if check_return_code:
         if proc.returncode != 0:
             print("Command terminated with non-zero return code")
             print(proc.stdout)
             print(proc.stderr)
         proc.check_returncode()
-    return proc.stdout, proc.stderr
+    return proc.stdout, proc.stderr, False
 
     # proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     # try:
@@ -61,7 +79,7 @@ def run_cmd(cmd: List[str], envvars: envvars_t = {},
 
 
 # Returns the command as a list of pieces and a dictionary indicating the environment variables to set
-def vcs_build_cmd(riscv_dv_path: Path, working_dir: Path, out: Path, cov: bool = False) -> Tuple[List[str], envvars_t]:
+def vcs_build_cmd(riscv_dv_path: Path, working_dir: Path, out: Path, cov: bool = False) -> cmd_t:
     assert cov is False  # haven't handled generator coverage collection yet
     vcs_opts = [
         '-full64',
@@ -70,7 +88,7 @@ def vcs_build_cmd(riscv_dv_path: Path, working_dir: Path, out: Path, cov: bool =
         '-lca',
         '+define+UVM_REGEX_NO_DPI',
         '-timescale=1ns/10ps',
-        f"+incdir+{riscv_dv_path}/target/rv64gc",
+        f"+incdir+{riscv_dv_path}/target/{isa_str}",
         f"+incdir+{riscv_dv_path}/user_extension",
         "-f", f"{riscv_dv_path}/files.f",
         "-l", f"{str(working_dir)}/compile.log",
@@ -85,7 +103,7 @@ def vcs_build_cmd(riscv_dv_path: Path, working_dir: Path, out: Path, cov: bool =
     return final_cmd, {'RISCV_DV_ROOT': str(riscv_dv_path)}
 
 
-def riscv_dv_cmd(generator_bin: Path, config: RiscvDvConfig, out_asm_file: Path) -> Tuple[List[str], envvars_t]:
+def riscv_dv_cmd(generator_bin: Path, config: RiscvDvConfig, out_asm_file: Path) -> cmd_t:
     # -cm_dir <out>/test.vdb -cm_log /dev/null -cm_name test_<seed>_<test_id>
     plusargs = [f"+{key}={value}" for key, value in config.plusarg_config.items()]
     seed = f"+ntb_random_seed={config.seed}"
@@ -98,7 +116,7 @@ def riscv_dv_cmd(generator_bin: Path, config: RiscvDvConfig, out_asm_file: Path)
     return cmd, {}
 
 
-def gcc_cmd(asm_file: Path, riscv_dv_path: Path, elf_name: str) -> Tuple[List[str], envvars_t]:
+def gcc_cmd(asm_file: Path, riscv_dv_path: Path, elf_name: str) -> cmd_t:
     gcc = "riscv64-unknown-elf-gcc"
     opts = [
         "-static",
@@ -106,7 +124,14 @@ def gcc_cmd(asm_file: Path, riscv_dv_path: Path, elf_name: str) -> Tuple[List[st
         "-fvisibility=hidden",
         "-nostdlib",
         "-nostartfiles",
+        f"-march={isa_str}",
+        f"-mabi=ilp32",
         f"-I{riscv_dv_path}/user_extension",
         f"-T{riscv_dv_path}/scripts/link.ld"
     ]
     return [gcc] + opts + [str(asm_file.resolve())] + ["-o", str(asm_file.parent / elf_name)], {}
+
+
+def spike_cmd(elf_file: Path) -> cmd_t:
+    cmd = ["spike", "--log-commits", f"--isa={isa_str}", "-l", str(elf_file.resolve())]
+    return cmd, {}
