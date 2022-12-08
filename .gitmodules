@@ -2,3 +2,7 @@
 	path = riscv-dv
 	url = git@github.com:google/riscv-dv
 	branch = master
+[submodule "rocket-chip"]
+	path = rocket-chip
+	url = git@github.com:chipsalliance/rocket-chip.git
+	branch = master
