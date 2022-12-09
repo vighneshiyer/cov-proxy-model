@@ -26,6 +26,7 @@ generate_configs = "scripts.generate_configs:main"
 generate_elf = "scripts.generate_elf:main"
 generate_elves = "scripts.generate_elves:main"
 run_rtl_sim = "scripts.run_rtl_sim:main"
+run_all_rtl_sims = "scripts.run_all_rtl_sims:main"
 
 [build-system]
 requires = ["poetry-core"]
