@@ -26,4 +26,7 @@ def main():
 def call_generate_elf(riscv_dv_bin: Path, config_id: Path, config_seed: Path) -> None:
     cmd = ["generate_elf", "--riscv-dv-bin", str(riscv_dv_bin), "--config", config_seed.resolve(),
            "--out-dir", str(config_id), "--out-prefix", config_seed.name.split('.')[0]]
+    # If the spike status file already exists, skip this one
+    if (config_seed.parent / config_seed.name.replace(".json", ".spike.status")).resolve().exists():
+        return
     stdout, stderr, timeout = run_cmd(cmd, {}, timeout=None, check_return_code=False)  # failures are handled later
