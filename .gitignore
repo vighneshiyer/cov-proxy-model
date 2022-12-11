@@ -5,3 +5,4 @@ build
 .idea
 configs
 generator
+.ipynb_checkpoints
