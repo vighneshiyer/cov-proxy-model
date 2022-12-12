@@ -1629,6 +1629,26 @@ optional = ["python-socks", "wsaccel"]
 test = ["websockets"]
 
 [[package]]
+name = "xgboost"
+version = "1.7.2"
+description = "XGBoost Python Package"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+
+[package.extras]
+dask = ["dask", "distributed", "pandas"]
+datatable = ["datatable"]
+pandas = ["pandas"]
+plotting = ["graphviz", "matplotlib"]
+pyspark = ["cloudpickle", "pyspark", "scikit-learn"]
+scikit-learn = ["scikit-learn"]
+
+[[package]]
 name = "zipp"
 version = "3.11.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -1643,7 +1663,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "560fb4ffda1bc848b7f31a022397807f6061e61b6c2a67e23d0506a116e5b9cd"
+content-hash = "16d221808adf81f5df5227b97cd16f017fe503cd76764fe9ca7ea1cb2563a967"
 
 [metadata.files]
 anyio = [
@@ -2909,6 +2929,14 @@ webencodings = [
 websocket-client = [
     {file = "websocket-client-1.4.2.tar.gz", hash = "sha256:d6e8f90ca8e2dd4e8027c4561adeb9456b54044312dba655e7cae652ceb9ae59"},
     {file = "websocket_client-1.4.2-py3-none-any.whl", hash = "sha256:d6b06432f184438d99ac1f456eaf22fe1ade524c3dd16e661142dc54e9cba574"},
+]
+xgboost = [
+    {file = "xgboost-1.7.2-py3-none-macosx_10_15_x86_64.macosx_11_0_x86_64.macosx_12_0_x86_64.whl", hash = "sha256:011126d470179177486e92c6a52c3f5deb9dd3e07a65eec5df9bf7dd1a70d2d0"},
+    {file = "xgboost-1.7.2-py3-none-macosx_12_0_arm64.whl", hash = "sha256:a3cf6d2e6e56147546a725d8301f06af33b8467179e17b11f63be9a6d7a9ccd3"},
+    {file = "xgboost-1.7.2-py3-none-manylinux2014_aarch64.whl", hash = "sha256:6f192542fbee7f07891a3b78616ef1f87013e22e33836507344a230188db784e"},
+    {file = "xgboost-1.7.2-py3-none-manylinux2014_x86_64.whl", hash = "sha256:51351d0a5e26016c348df23cdb2069a26bf41a9e586a24e552078435a110510a"},
+    {file = "xgboost-1.7.2-py3-none-win_amd64.whl", hash = "sha256:08ca6b3400dfd16f6159b2881f41b7443024339c14c5dbe10bba117af79126ab"},
+    {file = "xgboost-1.7.2.tar.gz", hash = "sha256:f1a749aedb9330afc48007cc78b8bbbbea35ce372f48a2735f9c71bbc7b8dcfb"},
 ]
 zipp = [
     {file = "zipp-3.11.0-py3-none-any.whl", hash = "sha256:83a28fcb75844b5c0cdaf5aa4003c2d728c77e05f5aeabe8e95e56727005fbaa"},
