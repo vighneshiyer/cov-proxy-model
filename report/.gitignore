@@ -1,0 +1,7 @@
+_minted*
+*.out
+*.blg
+*.pdf
+*.bbl
+*.log
+*.aux
