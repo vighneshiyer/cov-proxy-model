@@ -4,7 +4,7 @@ from joblib import delayed, Parallel
 
 from modeling.commands import run_cmd
 
-def run_all_rtl_sims(rtl_sim_bin, confg_dir):
+def run_all_rtl_sims(rtl_sim_bin, config_dir):
     config_dir = Path(config_dir)
     programs = []
     for config_id in config_dir.iterdir():
