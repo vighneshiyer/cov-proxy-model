@@ -49,3 +49,6 @@ def main():
         spike_status_file.write_text("TIMEOUT")
     else:
         spike_status_file.write_text(str(len(stderr.split('\n'))))
+
+if __name__ == "__main__":
+    main()

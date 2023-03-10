@@ -16,3 +16,6 @@ def main():
     bin_output = working_dir / args.out
     cmd, envvars = vcs_build_cmd(riscv_dv_path, working_dir, bin_output)
     run_cmd(cmd, envvars)
+
+if __name__ == "__main__":
+    main()

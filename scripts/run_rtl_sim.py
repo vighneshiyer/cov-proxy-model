@@ -19,3 +19,6 @@ def main():
     # assume about 1kHz simulation throughput (2x overhead for safety)
     stdout, stderr, timeout = run_cmd(cmd, envvars={}, timeout=args.max_cycles*(1/1e3)*2, check_return_code=False)
     Path(args.log_out).write_text(stdout + "\n" + stderr)
+
+if __name__ == "__main__":
+    main()

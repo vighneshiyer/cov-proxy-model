@@ -117,7 +117,7 @@ def riscv_dv_cmd(generator_bin: Path, config: RiscvDvConfig, out_asm_file: Path)
 
 
 def gcc_cmd(asm_file: Path, riscv_dv_path: Path, elf_name: str) -> cmd_t:
-    gcc = "riscv64-unknown-elf-gcc"
+    gcc = "/home/tmp/cs152-abq/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-gcc"
     opts = [
         "-static",
         "-mcmodel=medany",
@@ -133,5 +133,5 @@ def gcc_cmd(asm_file: Path, riscv_dv_path: Path, elf_name: str) -> cmd_t:
 
 
 def spike_cmd(elf_file: Path) -> cmd_t:
-    cmd = ["spike", "--log-commits", f"--isa={isa_str}", "-l", str(elf_file.resolve())]
+    cmd = ["/home/tmp/cs152-abq/chipyard/.conda-env/riscv-tools/bin/spike", "--log-commits", f"--isa={isa_str}", "-l", str(elf_file.resolve())]
     return cmd, {}
