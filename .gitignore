@@ -9,3 +9,4 @@ elf-out
 logs
 .ipynb_checkpoints
 .conda-env
+out
