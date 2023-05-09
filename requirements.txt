@@ -4,3 +4,5 @@ numpy
 matplotlib
 xgboost
 scikit-learn
+pydantic
+libnuma
