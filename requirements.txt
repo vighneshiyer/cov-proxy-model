@@ -6,3 +6,4 @@ xgboost
 scikit-learn
 pydantic
 libnuma
+pandas
