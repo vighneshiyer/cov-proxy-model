@@ -16,9 +16,9 @@ all: report.pdf
 
 report.pdf: report.tex $(PACKAGE).cls references.bib
 	texfot pdflatex -shell-escape $<
-	#texfot bibtex report
-	#texfot pdflatex -shell-escape $<
-	#texfot pdflatex -shell-escape $<
+	texfot bibtex report
+	texfot pdflatex -shell-escape $<
+	texfot pdflatex -shell-escape $<
 
 %.pdf:  %.dtx   $(PACKAGE).cls
 	pdflatex $<

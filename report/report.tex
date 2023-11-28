@@ -158,6 +158,17 @@ where given a concrete binding of each primary input for $n$ clock cycles of sim
 In practice, RTL testbenches invoke the underlying simulator one clock cycle at a time, by providing primary inputs for one cycle, telling the simulator to execute the update rules, inspecting the primary outputs, and repeating this process.
 A popular Verilog simulator that supports this mode of execution is Verilator, and we use it for our benchmarks.
 
+\subsubsection{Coverage Collection}
+
+Just like software instrumentation techniques enable one to see which code paths were explored at the source-level, there are instrumentation passes built into RTL simulators that enable coverage collection during the simulation.
+Hardware coverage is split into two types: 1) structural and 2) functional.
+
+Structural coverage refers to any coverpoint that can be defined from analyzing the RTL AST in isolation.
+This includes line/condition coverage (similar to the equivalent in software), toggle coverage (which measures the number of times a bit toggles between 0 and 1 for registers and ports), and FSM coverage (which covers all the states and unique transitions for any FSMs in an RTL design).
+
+Functional coverage refers to any coverpoint that describes a microarchitectural feature that a designer wants to see exercised: these coverpoints must be manually defined and are specific to the semantics of a given design.
+
+
 \subsection{Digital Hardware Verification}
 
 \begin{figure}
@@ -167,11 +178,260 @@ A popular Verilog simulator that supports this mode of execution is Verilator, a
   \label{fig:dynamic_verif}
 \end{figure}
 
+\subsubsection{Bug Identification}
+
 Merely simulating a transition system by providing it with inputs doesn`t tell us if anything has gone wrong, since the simulation behavior is always well defined.
 This is in contrast to user-space software which has `universal' modes of failure such as segfaults or stack overflows, which are failures that exist independently of the application logic itself.
 
-In hardware verification, bugs are detected by assertions baked into the Verilog RTL or by 
+In hardware verification, bugs are detected by manually written assertions in the Verilog RTL or by assertions that exist in the verification environment, most commonly comparing a software golden model of the hardware to the output of RTL simulation.
+In the case of CPUs, bugs are detected by comparing the instruction commit logs between RTL simulation and ISA-level simulation, since instruction retirement is a synchronization point where we can expect a match in architectural state.
 
+\subsubsection{Testbench Architecture}
+
+See Figure \ref{fig:dynamic_verif} for the generic architecture of a verification environment.
+A VIP (verification IP) is a component that can translate high-level transactions used to interact with the RTL design down to the low-level cycle-by-cycle and port-by-port representation the simulator understands.
+The environment uses a stimulus generator to create random stimuli, which is driven into the RTL; internal signals from the RTL (e.g. PC register and register file) are inspected by other verification components and compared against a golden model.
+
+\subsubsection{Stimulus Generators}
+
+We usually do not write stimuli that interacts with an RTL design at its level of abstraction: by driving its primary inputs to the values we want and sampling its primary outputs.
+Rather, we construct the stimuli at a higher level of abstraction and write a separate component (the VIP) that performs the abstraction translation.
+
+This is the case for the verification of CPUs.
+At the top-level of a CPU core, there is usually a memory interface that the core`s internal L1 caches will use to talk to the upper memory system.
+If you wanted to simulate the execution of a program on the CPU, the testbench would have to manually drive the memory bus with the instructions and data from the program as the CPU requests them.
+Our stimulus does not consist of these memory bus interactions, but rather only contains the assembly code we want the CPU to execute.
+
+\subsubsection{The Anatomy of a Stimulus Generator}
+
+The architecture of a CPU stimulus generator is shown in Figure \ref{fig:stimgen}.
+A single stimulus is made up of a list of \textit{sequences}.
+Each \textit{sequence} is a hand-crafted assembly generation template that aims to exercise some (micro)architectural feature of the CPU.
+
+For instance, there might be a sequence for generating an arbitrary arithmetic instruction and another one for generating a group of assembly instructions that have a read-after-write (RAW) dependency.
+Sequences can also refer to other sequences.
+For instance, consider a loop sequence, which in turn will refer to another sequence to determine what goes into the loop body.
+
+Sequences are assembly generators that need to sample sources of randomness (\textit{knobs}) to determine the concrete assembly they will emit.
+For instance, the ``Any arithmetic inst'' sequence would sample the \textit{RInst} knob to determine which instruction to emit.
+A knob defines a distribution over the values that knob can take on (for \textit{RInst}: a weight is assigned to every arithmetic instruction).
+The same sequence would also need to sample the \textit{RegBinding} knob to determine which registers to use as the operands and destination.
+
+While it would be ideal if stimulus generators were just a function of the knob distributions, in practice, these generators also consume a random seed.
+This seed is used to: 1) seed a PRNG that can be sampled anytime inside the generator in addition to being used for sampling of knobs, and 2) seed the constraint solver sampler.
+Most stimulus generators use declarative constraints that the underlying RTL simulator solves and samples from (see SystemVerilog`s support for constrained random stimulus generation).
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=1\linewidth]{figs/stimgen.pdf}
+  \caption{The architecture of a CPU instruction generator}
+  \label{fig:stimgen}
+\end{figure}
+
+\subsubsection{The Verification Loop}
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=0.65\linewidth]{figs/typical_verif_flow.pdf}
+  \caption{A typical verification loop used in industry DV}
+  \label{fig:verif_loop}
+\end{figure}
+
+The goal of any verification process is to find bugs.
+Since it is impossible to rule out bugs on a large enough design, the practical goal becomes to close any coverage holes, or hit certain parts of the design harder to coax out any latent bugs.
+This process is described in Figure \ref{fig:verif_loop} where a DV engineer inspects coverage data from RTL simulation and tunes knob distributions or adds new sequences to the generator to get the desired coverage.
+
+The major limitation of this flow is that it is bottlenecked by the speed of RTL simulation which is often 10-100x slower than stimulus generation.
+This long feedback latency motivates our technique.
+
+\section{Proposed Technique}
+
+In this project, we investigate whether it is viable to develop a coverage proxy model.
+The proposed setup is shown in Figure \ref{fig:cov_proxy_model}.
+The idea is by training a supervised model that can predict line coverage of RTL from the knob values passed into the stimulus generator, we enable a few potential functions:
+
+\begin{enumerate}
+  \item Stimulus pruning: there are many potential permutations of knob values that lead to similar generated stimulus with similar coverage characteristics. When running regressions, it would be useful to avoid wasting RTL simulation time on stimuli that aren`t likely to increase coverage.
+  \item Correlation analysis: an interpretable coverage proxy model can show correlations between certain combinations of knobs and specific coverpoints. This data is useful for manual knob tuning and for validating the stimulus generator is targetting the coverpoints it ought to.
+  \item Automated knob tuning: use the proxy model to make blackbox tuning viable; run RTL simulations only when needed to confirm expected coverage.
+\end{enumerate}
+
+\subsection{Experimental Setup}
+
+We use riscv-dv, Google`s UVM-based RISC-V instruction generator as our stimulus generator.
+riscv-dv has a total of 52 configurable knobs, of which only 23 are actually meaningful (and will not cause erroneous testbench failures) for the RV32IMC target configuration.
+Of these 23, four are integer valued knobs and the other 19 are boolean 0/1 switches.
+Here are a few of the knobs under consideration:
+
+\begin{itemize}
+  \item \verb|num_of_sub_program| (integer): Number of sequences (instruction streams) in the generated program
+  \item \verb|instr_cnt| (integer): Total number of instructions in the final program
+  \item \verb|no_branch_jump| (bool): Disable the emission of branch or jump instructions
+  \item \verb|illegal_instr_ratio| (integer): Number of instructions out of a 1000 that should be illegal instructions
+\end{itemize}
+
+As we can see, they influence some characteristics of the generated program, and so might be usable input features for a coverage prediction model.
+As a note, I tried to use the RV64GC target, but riscv-dv would often generate programs that would crash spike, so I opted to go with their more heavily tested RV32 target.
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=0.65\linewidth]{figs/cov_proxy_model_usage.pdf}
+  \caption{The verification loop enhanced with a coverage proxy model}
+  \label{fig:cov_proxy_model}
+\end{figure}
+
+We used was a rocket-chip RV32IMC core as the RTL design.
+We modified the testharness for this core with line coverage collection and dumping enabled and we used Verilator as the RTL simulator.
+
+We defined a range of values that each knob can take on.
+For integer knobs this was set based on intuition and for boolean knobs we permit 0 and 1.
+Importantly, we also defined the default value for each knob and we only switch a knob assignment from its default with a certain probability.
+This is done to avoid messing with too many knobs at once per configuration which would produce an unrealistic and splattered dataset.
+
+Using this strategy, we sample 100 different knob configurations with a non-default probability per knob of 0.8.
+For each knob configuration, we consider five different generator seeds, giving a total of 500 tests.
+All the tests were run on the spike RISC-V ISA simulator for golden commit logs and also on the Verilator simulator.
+
+\section{Results}
+
+\subsection{Coverage Correlations}
+
+We first look at the entire dataset on its own and figure out what the true dimensionality of each coverage vector is.
+We collect hit counts for 8k unique coverpoints per test, but of those, 2.7k are never hit in the entire dataset, and 5k are hit by every test.
+This leaves 470 coverpoints that actually have variance across different tests.
+
+We first normalize each coverage count by the number of clock cycles it took to execute the test: the units are now (hits per cycle).
+This is important because we don`t want to favor a test that has a larger cover count just because it runs for more simulation cycles.
+In practice, to hit an RTL unit \textit{harder} to coax out bugs, we want to increase its hits/cycle, not aggregate hits alone.
+
+Then, to construct the coverage correlation heatmap in figure \ref{fig:cov_heatmap}, we normalize each coverpoint`s hits/cycle by the maximum achieved by any test (so that each test`s strength for a given coverpoint is visible).
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=\linewidth]{figs/cov_heatmap.png}
+  \caption{A heatmap with each column representing one of 470 coverpoints and each row representing a single test (only 100 tests are shown). The more green a cell, the more aggressively that test hits the coverpoint with respect to all the other tests.}
+  \label{fig:cov_heatmap}
+\end{figure}
+
+We can make these observations:
+
+\begin{itemize}
+  \item Many coverpoints are correlated with each other. This isn`t surprising for line coverage since a long if-elseif-else chain has predictable relationships based on which branches are taken. Also, if a test targets a particular unit, we expect many of the covers in that unit will be hit.
+  \item Hitting certain coverpoints requires extreme luck or specific knob settings. For instance, the long thin row on the left represents coverpoints in the MMIO AXI4 interface. This interface will not be hit unless the core tries to access a specific memory region, which is completely up to chance (no knob control exists).
+  \item If we take an SVD of this matrix, the first 1-3 singular values dominate, and the rest are close to 0. The real dimensionality of this matrix is not 470, but closer to 5 or 10.
+\end{itemize}
+
+\subsection{Proxy Model Evaluation}
+
+We take a 80:20 train/test split several times and train a few different classical models (linear and ridge regressors and xgboost decision trees) to determine the typical model prediction accuracy.
+While the mean absolute error does go down slightly from linear to ridge to xgboost models, the gain is marginal.
+
+The mean / median absolute error is about \textbf{0.0004 / 5.24e-6 hits/cycle}.
+In context, the median hits/cycle across all coverpoints is 5.43e-6 hits/cycle.
+This is not a great result: the error margin is roughly equal to the value we`re trying to predict (median relative error across all coverpoints is close to 100\%).
+
+See Figure \ref{fig:error_vs_seen_freq} for some analysis of the prediction error for a coverpoint as a function of how often that coverpoint was seen in the training set.
+We would expect to see a negative correlation where increased incidence of a coverpoint would allow us to learn more about what knobs contribute to it.
+However, we instead see no or even a slightly positive correlation.
+This likely indicates that there is not enough training data or the data is too noisy for the model to learn anything.
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=\linewidth]{figs/error_vs_seen_freq.png}
+  \caption{Coverpoint prediction error as a function of how frequently that coverpoint has been seen in the training set.}
+  \label{fig:error_vs_seen_freq}
+\end{figure}
+
+\subsection{Variance of Coverpoint Hits By Seed}
+
+We mentioned earlier that even with the same knob configuration, the seed passed into the simulator can also have an impact on the generated stimulus (and resultant coverage).
+We attempt to visualize this in Figure \ref{fig:variance}.
+It is clear that for some knob configurations, the seed has a large (25\%+) impact on hits and it is impossible for a model to predict that variance in a general way.
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=\linewidth]{figs/variance2.png}
+  \caption{Each different colored line represents a fixed knob configuration. The x-axis is the seed used for a run of the generator and the y-axis shows the hits/cycle for coverpoint 401 (picked arbitrarily).}
+  \label{fig:variance}
+\end{figure}
+
+It is clear that riscv-dv makes many decisions that are not directly influenced by the knob values.
+This limits the potential accuracy of any model using knob values alone as the input feature.
+
+This motivates using more stimulus specific features such as the functional coverpoints included in riscv-dv.
+We have a way to dump this generator-level coverage data, but work is still ongoing to parse that coverage database so its features can be used to embed a stimulus.
+
+\subsection{Interpreting Model Weights}
+
+One nice feature of classical AI models is their interpretability.
+We take the ridge regression model and ask what is the most and least correlated knob with the following two coverpoints.
+
+\begin{itemize}
+  \item CP 10 (AXI4 to MMIO) - correlated with \verb|enable_misaligned_instr| and inversely with \verb|illegal_instr_ratio|
+  \item CP 401 (ALU divider) - correlated with \verb|no_branch_jump| and inversely with \verb|set_mstatus_mprv|
+\end{itemize}
+
+These actually make some sense and can help validate that the model is at least learning something.
+
+CP 10 is only hit when the core makes a memory request that accesses the MMIO physical address space.
+It`s correlation with \verb|enable_misaligned_instr| is mysterious, but it`s inverse correlation with \verb|illegal_instr_ratio| is sensible since having more illegal instructions will cause the processor to spend time in trap handling code and with pipeline flushes rather than executing memory transactions.
+
+CP 401 is hit whenever a RISC-V divide instruction is executed.
+It makes sense that it is correlated with \verb|no_branch_jump| since disabling those control instructions increases the number of instructions riscv-dv can use for arithmetic ops, one of which is divide.
+It`s inverse correlation with \verb|set_mstatus_mprv| also makes sense since trap handling code when dealing with memory privilege exceptions will consume the instruction budget over arithmetic ops.
+
+\section{Discussion}
+
+Overall, I think this work would have benefitted from constructing a larger dataset and from including generator-level functional coverage as an input feature.
+Nevertheless, I have come to realize that perhaps riscv-dv is not architected in a way that is conducive for building coverage proxy models.
+
+\subsection{Notes on riscv-dv}
+
+Originally, I had planned on adding post randomization hooks to every class in riscv-dv so that I could capture the `decisions' the generator was making and use them as stimulus embedding features.
+I realized that this is not viable since many riscv-dv classes perform additional mutation of class fields after randomization, and it is not possible to track the chain of function calls and mutable state.
+This motivates an instruction generator that has fully controllable and natively instrumentable execution flow where we know what each byte of parametric randomness is used for.
+
+Another note is that the tests produced by riscv-dv, across different knob configurations, do not have many distinguishing characteristics.
+Coverage across different configurations is very similar, and many deviances are due to random seed selection and not knob value tuning.
+
+Finally, we will note that the tens of knobs in riscv-dv provide very little control over the stimulus.
+As the model weight analysis shows, most of the knob control that allows us to hit some coverpoints harder is actually just coincidental rather than a knob directly influencing a coverage outcome.
+
+\subsection{Notes on Prior Work}
+
+The most relevant prior work\cite{design2vec} attempts to train a coverage proxy model to classify coverpoints as hit or not hit.
+This is a biased approach as simply increasing the number of instructions or different sequences in a test can increase the likelihood a coverpoint will be hit, even if it has nothing to do with specific knob settings.
+We can observe in their supplemental materials that their model suggests the usage of \verb|instr_cnt| values about 10000 to hit certain coverpoints, when the default for that knob is 200.
+It is very unlikely that hitting any coverpoint in a 3 stage Ibex core requires 10k instructions, so this seems to be an artifact of their predicted feature (hit/not hit vs hits/cycle) and the lack of control via knobs of riscv-dv.
+
+\section{Future Work}
+
+\subsection{Parametric Hardware Fuzzing}
+
+This project has made clear that riscv-dv is not a suitable generator for training coverage proxy models or for attempting parametric fuzzing of hardware.
+To that end, we are working on a QuickCheck-like library in Scala for describing stimulus generators that can handle hardware datatypes as well as declarative constraints specified as a Chisel circuit.
+
+The idea is similar to QuickCheck in that at the core is a \texttt{Gen[T]} monad that describes how to generate a `random' value of type T, and we have a set of combinators for composing \texttt{Gen}s.
+Once you have composed the entire generator monadically, you can invoke two different interpreters: one which delegates to the underlying Scala random stdlib, and an other which takes randomness from a stream of bytes which is user controllable.
+
+Such a library would enable Zest-style fuzzing of hardware.
+We are working on a RV32I instruction generator in this repo \url{https://github.com/girantinas/randomapi}.
+
+\subsection{Coverage Extrapolation and RTL to Graph Conversion}
+
+The prior work uses a coverpoint embedding in its coverage proxy model, but this requires learning the CP embedding along with the embedding of the knob values.
+This means the CP embedding becomes design specific and requires retraining for new circuits.
+However, it should be possible to start with a naive supervised coverage prediction model and then use a coverage extrapolation model to guess if any never before covered points might end up covered (Figure \ref{cov_extrapolation}).
+
+The key infrastructure in testing this hypothesis is a RTL to graph compiler that can take as input RTL and emit a graph representation where all the connectivity, logic, and state information is preserved.
+We are working on such a compiler for the FIRRTL hardware IR to emit a graph in the GML format in this repo \url{https://github.com/vighneshiyer/rtl2graph}.
+
+\begin{figure}
+  %\centering
+  \includegraphics[width=\linewidth]{figs/cov_extrapolation.pdf}
+  \caption{A potential approach to coverage extrapolation.}
+  \label{fig:cov_extrapolation}
+\end{figure}
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
