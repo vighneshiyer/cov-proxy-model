@@ -5,4 +5,8 @@ build
 .idea
 configs
 generator
+elf-out
+logs
 .ipynb_checkpoints
+.conda-env
+out

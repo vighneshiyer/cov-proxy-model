@@ -1,0 +1,9 @@
+pyyaml
+joblib
+numpy
+matplotlib
+xgboost
+scikit-learn
+pydantic
+libnuma
+pandas
